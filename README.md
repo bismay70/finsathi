@@ -5,10 +5,10 @@ Welcome to **Finsathi** , a professional-grade Personal Finance and Wealth Manag
 ## 📸 Platform Screenshots
 
 <p align="center">
-  <img src="https://placehold.co/600x400/050508/CCFF00?text=Dashboard+Overview" width="49%" alt="Dashboard Screenshot" />
-  <img src="https://placehold.co/600x400/050508/CCFF00?text=Transaction+Management" width="49%" alt="Transactions Screenshot" />
-  <img src="https://placehold.co/600x400/050508/CCFF00?text=AI+Receipt+Scanner" width="49%" alt="AI Scanner Screenshot" />
-  <img src="https://placehold.co/600x400/050508/CCFF00?text=Financial+Reports" width="49%" alt="Reports Screenshot" />
+  <img src="client/public/ss1.png" width="49%" alt="Dashboard Screenshot" />
+  <img src="client/public/ss2.png" width="49%" alt="Transactions Screenshot" />
+  <img src="client/public/ss3.png" width="49%" alt="AI Scanner Screenshot" />
+  <img src="client/public/ss4.png" width="49%" alt="Reports Screenshot" />
 </p>
 
 ---
