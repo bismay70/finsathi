@@ -19,7 +19,7 @@ import {
   scanReceiptService,
   updateTransactionService,
 } from "../services/transaction.service";
-import { TransactionTypeEnum } from "../models/transaction.model";
+import { TransactionTypeEnum } from "../types";
 
 export const createTransactionController = asyncHandler(
   async (req: Request, res: Response) => {

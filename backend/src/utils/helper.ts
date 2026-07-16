@@ -1,5 +1,5 @@
 import { addDays, addMonths, addWeeks, addYears, startOfMonth } from "date-fns";
-import { RecurringIntervalEnum } from "../models/transaction.model";
+import { TransactionRecurringIntervalEnum } from "../types";
 
 export function calulateNextReportDate(lastSentDate?: Date): Date {
   const now = new Date();
@@ -14,19 +14,19 @@ export function calulateNextReportDate(lastSentDate?: Date): Date {
 
 export function calculateNextOccurrence(
   date: Date,
-  recurringInterval: keyof typeof RecurringIntervalEnum
+  recurringInterval: TransactionRecurringIntervalEnum | keyof typeof TransactionRecurringIntervalEnum | null
 ) {
   const base = new Date(date);
   base.setHours(0, 0, 0, 0);
 
   switch (recurringInterval) {
-    case RecurringIntervalEnum.DAILY:
+    case TransactionRecurringIntervalEnum.DAILY:
       return addDays(base, 1);
-    case RecurringIntervalEnum.WEEKLY:
+    case TransactionRecurringIntervalEnum.WEEKLY:
       return addWeeks(base, 1);
-    case RecurringIntervalEnum.MONTHLY:
+    case TransactionRecurringIntervalEnum.MONTHLY:
       return addMonths(base, 1);
-    case RecurringIntervalEnum.YEARLY:
+    case TransactionRecurringIntervalEnum.YEARLY:
       return addYears(base, 1);
     default:
       return base;

@@ -1,73 +1,58 @@
-import mongoose from "mongoose";
-import UserModel from "../models/user.model";
-import { NotFoundException, UnauthorizedException } from "../utils/app-error";
-import {
-  LoginSchemaType,
-  RegisterSchemaType,
-} from "../validators/auth.validator";
-import ReportSettingModel, {
-  ReportFrequencyEnum,
-} from "../models/report-setting.model";
+import { UnauthorizedException } from "../utils/app-error";
 import { calulateNextReportDate } from "../utils/helper";
-import { signJwtToken } from "../utils/jwt";
+import { firebaseAuth, db } from "../config/firebase.config";
 
-export const registerService = async (body: RegisterSchemaType) => {
-  const { email } = body;
+export const syncUserService = async (token: string, body: any) => {
+  const decodedToken = await firebaseAuth.verifyIdToken(token);
+  if (!decodedToken || !decodedToken.uid) {
+    throw new UnauthorizedException("Invalid Firebase token");
+  }
 
-  const session = await mongoose.startSession();
+  const { uid, email, name: tokenName, picture } = decodedToken;
+  const { name = tokenName || "User" } = body;
 
   try {
-    await session.withTransaction(async () => {
-      const existingUser = await UserModel.findOne({ email }).session(session);
-      if (existingUser) throw new UnauthorizedException("User already exists");
+    const userRef = db.collection("users").doc(uid);
+    const reportSettingRef = db.collection("report_settings").doc(uid);
 
-      const newUser = new UserModel({
-        ...body,
-      });
+    const userDoc = await userRef.get();
+    let user: any = null;
+    let reportSetting: any = null;
 
-      await newUser.save({ session });
+    if (!userDoc.exists) {
+      // Create new user if they don't exist
+      const batch = db.batch();
+      
+      user = {
+        firebaseUid: uid,
+        email: email,
+        name: name,
+        profilePicture: picture || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      batch.set(userRef, user);
 
-      const reportSetting = new ReportSettingModel({
-        userId: newUser._id,
-        frequency: ReportFrequencyEnum.MONTHLY,
+      reportSetting = {
+        userId: uid,
+        frequency: "MONTHLY", // Assuming ReportFrequencyEnum.MONTHLY corresponds to this
         isEnabled: true,
         nextReportDate: calulateNextReportDate(),
         lastSentDate: null,
-      });
-      await reportSetting.save({ session });
+      };
+      batch.set(reportSettingRef, reportSetting);
 
-      return { user: newUser.omitPassword() };
-    });
+      await batch.commit();
+    } else {
+      user = userDoc.data();
+      const reportSettingDoc = await reportSettingRef.get();
+      if (reportSettingDoc.exists) {
+        reportSetting = reportSettingDoc.data();
+      }
+    }
+
+    return { user, reportSetting };
   } catch (error) {
     throw error;
-  } finally {
-    await session.endSession();
   }
-};
-
-export const loginService = async (body: LoginSchemaType) => {
-  const { email, password } = body;
-  const user = await UserModel.findOne({ email });
-  if (!user) throw new NotFoundException("Email/password not found");
-
-  const isPasswordValid = await user.comparePassword(password);
-
-  if (!isPasswordValid)
-    throw new UnauthorizedException("Invalid email/password");
-
-  const { token, expiresAt } = signJwtToken({ userId: user.id });
-
-  const reportSetting = await ReportSettingModel.findOne(
-    {
-      userId: user.id,
-    },
-    { _id: 1, frequency: 1, isEnabled: 1 }
-  ).lean();
-
-  return {
-    user: user.omitPassword(),
-    accessToken: token,
-    expiresAt,
-    reportSetting,
-  };
 };

@@ -1,11 +1,9 @@
-import mongoose, { PipelineStage } from "mongoose";
 import { DateRangeEnum, DateRangePreset } from "../enums/date-range.enum";
-import TransactionModel, {
-  TransactionTypeEnum,
-} from "../models/transaction.model";
 import { getDateRange } from "../utils/date";
 import { differenceInDays, subDays, subYears } from "date-fns";
 import { convertToDollarUnit } from "../utils/format-currency";
+import { db } from "../config/firebase.config";
+import { format } from "date-fns";
 
 export const summaryAnalyticsService = async (
   userId: string,
@@ -14,118 +12,37 @@ export const summaryAnalyticsService = async (
   customTo?: Date
 ) => {
   const range = getDateRange(dateRangePreset, customFrom, customTo);
-
   const { from, to, value: rangeValue } = range;
 
-  const currentPeriodPipeline: PipelineStage[] = [
-    {
-      $match: {
-        userId: new mongoose.Types.ObjectId(userId),
-        ...(from &&
-          to && {
-            date: {
-              $gte: from,
-              $lte: to,
-            },
-          }),
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        totalIncome: {
-          $sum: {
-            $cond: [
-              { $eq: ["$type", TransactionTypeEnum.INCOME] },
-              { $abs: "$amount" },
-              0,
-            ],
-          },
-        },
-        totalExpenses: {
-          $sum: {
-            $cond: [
-              { $eq: ["$type", TransactionTypeEnum.EXPENSE] },
-              { $abs: "$amount" },
-              0,
-            ],
-          },
-        },
+  let query: FirebaseFirestore.Query = db.collection("transactions").where("userId", "==", userId);
+  
+  if (from && to) {
+    query = query.where("date", ">=", from).where("date", "<=", to);
+  }
 
-        transactionCount: { $sum: 1 },
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        totalIncome: 1,
-        totalExpenses: 1,
-        transactionCount: 1,
+  const snapshot = await query.get();
+  const transactions = snapshot.docs.map(doc => doc.data());
 
-        availableBalance: { $subtract: ["$totalIncome", "$totalExpenses"] },
+  let totalIncome = 0;
+  let totalExpenses = 0;
+  const transactionCount = transactions.length;
 
-        savingData: {
-          $let: {
-            vars: {
-              income: { $ifNull: ["$totalIncome", 0] },
-              expenses: { $ifNull: ["$totalExpenses", 0] },
-            },
-            in: {
-              // ((income - expenses) / income) * 100;
-              savingsPercentage: {
-                $cond: [
-                  { $lte: ["$$income", 0] },
-                  0,
-                  {
-                    $multiply: [
-                      {
-                        $divide: [
-                          { $subtract: ["$$income", "$$expenses"] },
-                          "$$income",
-                        ],
-                      },
-                      100,
-                    ],
-                  },
-                ],
-              },
+  transactions.forEach((tx: any) => {
+    if (tx.type === "INCOME") {
+      totalIncome += Math.abs(tx.amount || 0);
+    } else if (tx.type === "EXPENSE") {
+      totalExpenses += Math.abs(tx.amount || 0);
+    }
+  });
 
-              //Expense Ratio = (expenses / income) * 100
-              expenseRatio: {
-                $cond: [
-                  { $lte: ["$$income", 0] },
-                  0,
-                  {
-                    $multiply: [
-                      {
-                        $divide: ["$$expenses", "$$income"],
-                      },
-                      100,
-                    ],
-                  },
-                ],
-              },
-            },
-          },
-        },
-      },
-    },
-  ];
-
-  const [current] = await TransactionModel.aggregate(currentPeriodPipeline);
-
-  const {
-    totalIncome = 0,
-    totalExpenses = 0,
-    availableBalance = 0,
-    transactionCount = 0,
-    savingData = {
-      expenseRatio: 0,
-      savingsPercentage: 0,
-    },
-  } = current || {};
-
-  console.log(current, "current");
+  const availableBalance = totalIncome - totalExpenses;
+  
+  let savingsPercentage = 0;
+  let expenseRatio = 0;
+  if (totalIncome > 0) {
+    savingsPercentage = ((totalIncome - totalExpenses) / totalIncome) * 100;
+    expenseRatio = (totalExpenses / totalIncome) * 100;
+  }
 
   let percentageChange: any = {
     income: 0,
@@ -141,81 +58,42 @@ export const summaryAnalyticsService = async (
   };
 
   if (from && to && rangeValue !== DateRangeEnum.ALL_TIME) {
-    //last 30 days  previous las 30 days,
-
     const period = differenceInDays(to, from) + 1;
-    console.log(`${differenceInDays(to, from)}`, period, "period");
-
-    const isYearly = [
-      DateRangeEnum.LAST_YEAR,
-      DateRangeEnum.THIS_YEAR,
-    ].includes(rangeValue);
+    const isYearly = [DateRangeEnum.LAST_YEAR, DateRangeEnum.THIS_YEAR].includes(rangeValue);
 
     const prevPeriodFrom = isYearly ? subYears(from, 1) : subDays(from, period);
-
     const prevPeriodTo = isYearly ? subYears(to, 1) : subDays(to, period);
-    console.log(prevPeriodFrom, prevPeriodTo, "Prev date");
 
-    const prevPeriodPipeline = [
-      {
-        $match: {
-          userId: new mongoose.Types.ObjectId(userId),
-          date: {
-            $gte: prevPeriodFrom,
-            $lte: prevPeriodTo,
-          },
-        },
+    const prevSnapshot = await db.collection("transactions")
+      .where("userId", "==", userId)
+      .where("date", ">=", prevPeriodFrom)
+      .where("date", "<=", prevPeriodTo)
+      .get();
+      
+    const prevTransactions = prevSnapshot.docs.map(doc => doc.data());
+
+    let prevIncome = 0;
+    let prevExpenses = 0;
+
+    prevTransactions.forEach((tx: any) => {
+      if (tx.type === "INCOME") prevIncome += Math.abs(tx.amount || 0);
+      else if (tx.type === "EXPENSE") prevExpenses += Math.abs(tx.amount || 0);
+    });
+
+    const prevBalance = prevIncome - prevExpenses;
+
+    percentageChange = {
+      income: calaulatePercentageChange(prevIncome, totalIncome),
+      expenses: calaulatePercentageChange(prevExpenses, totalExpenses),
+      balance: calaulatePercentageChange(prevBalance, availableBalance),
+      prevPeriodFrom,
+      prevPeriodTo,
+      previousValues: {
+        incomeAmount: prevIncome,
+        expenseAmount: prevExpenses,
+        balanceAmount: prevBalance,
       },
-      {
-        $group: {
-          _id: null,
-          totalIncome: {
-            $sum: {
-              $cond: [
-                { $eq: ["$type", TransactionTypeEnum.INCOME] },
-                { $abs: "$amount" },
-                0,
-              ],
-            },
-          },
-          totalExpenses: {
-            $sum: {
-              $cond: [
-                { $eq: ["$type", TransactionTypeEnum.EXPENSE] },
-                { $abs: "$amount" },
-                0,
-              ],
-            },
-          },
-        },
-      },
-    ];
-
-    const [previous] = await TransactionModel.aggregate(prevPeriodPipeline);
-
-    console.log(previous, "Prvious Data");
-    if (previous) {
-      const prevIncome = previous.totalIncome || 0;
-      const prevExpenses = previous.totalExpenses || 0;
-      const prevBalance = prevIncome - prevExpenses;
-
-      const currentIncome = totalIncome;
-      const currentExpenses = totalExpenses;
-      const currentBalance = availableBalance;
-
-      percentageChange = {
-        income: calaulatePercentageChange(prevIncome, currentIncome),
-        expenses: calaulatePercentageChange(prevExpenses, currentExpenses),
-        balance: calaulatePercentageChange(prevBalance, currentBalance),
-        prevPeriodFrom: prevPeriodFrom,
-        prevPeriodTo: prevPeriodTo,
-        previousValues: {
-          incomeAmount: prevIncome,
-          expenseAmount: prevExpenses,
-          balanceAmount: prevBalance,
-        },
-      };
-    }
+    };
   }
 
   return {
@@ -223,22 +101,16 @@ export const summaryAnalyticsService = async (
     totalIncome: convertToDollarUnit(totalIncome),
     totalExpenses: convertToDollarUnit(totalExpenses),
     savingRate: {
-      percentage: parseFloat(savingData.savingsPercentage.toFixed(2)),
-      expenseRatio: parseFloat(savingData.expenseRatio.toFixed(2)),
+      percentage: parseFloat(savingsPercentage.toFixed(2)),
+      expenseRatio: parseFloat(expenseRatio.toFixed(2)),
     },
     transactionCount,
     percentageChange: {
       ...percentageChange,
       previousValues: {
-        incomeAmount: convertToDollarUnit(
-          percentageChange.previousValues.incomeAmount
-        ),
-        expenseAmount: convertToDollarUnit(
-          percentageChange.previousValues.expenseAmount
-        ),
-        balanceAmount: convertToDollarUnit(
-          percentageChange.previousValues.balanceAmount
-        ),
+        incomeAmount: convertToDollarUnit(percentageChange.previousValues.incomeAmount),
+        expenseAmount: convertToDollarUnit(percentageChange.previousValues.expenseAmount),
+        balanceAmount: convertToDollarUnit(percentageChange.previousValues.balanceAmount),
       },
     },
     preset: {
@@ -258,107 +130,50 @@ export const chartAnalyticsService = async (
   const range = getDateRange(dateRangePreset, customFrom, customTo);
   const { from, to, value: rangeValue } = range;
 
-  const filter: any = {
-    userId: new mongoose.Types.ObjectId(userId),
-    ...(from &&
-      to && {
-        date: {
-          $gte: from,
-          $lte: to,
-        },
-      }),
-  };
+  let query: FirebaseFirestore.Query = db.collection("transactions").where("userId", "==", userId);
+  
+  if (from && to) {
+    query = query.where("date", ">=", from).where("date", "<=", to);
+  }
 
-  const result = await TransactionModel.aggregate([
-    { $match: filter },
-    //Group the transaction by date (YYYY-MM-DD)
-    {
-      $group: {
-        _id: {
-          $dateToString: {
-            format: "%Y-%m-%d",
-            date: "$date",
-          },
-        },
+  const snapshot = await query.get();
+  
+  const dailyData: Record<string, any> = {};
+  let totalIncomeCount = 0;
+  let totalExpenseCount = 0;
 
-        income: {
-          $sum: {
-            $cond: [
-              { $eq: ["$type", TransactionTypeEnum.INCOME] },
-              { $abs: "$amount" },
-              0,
-            ],
-          },
-        },
+  snapshot.docs.forEach(doc => {
+    const tx = doc.data();
+    // Safely parse Firestore timestamp or JS Date
+    const dateObj = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
+    const dateStr = format(dateObj, "yyyy-MM-dd");
 
-        expenses: {
-          $sum: {
-            $cond: [
-              { $eq: ["$type", TransactionTypeEnum.EXPENSE] },
-              { $abs: "$amount" },
-              0,
-            ],
-          },
-        },
+    if (!dailyData[dateStr]) {
+      dailyData[dateStr] = { date: dateStr, income: 0, expenses: 0, incomeCount: 0, expenseCount: 0 };
+    }
 
-        incomeCount: {
-          $sum: {
-            $cond: [{ $eq: ["$type", TransactionTypeEnum.INCOME] }, 1, 0],
-          },
-        },
+    if (tx.type === "INCOME") {
+      dailyData[dateStr].income += Math.abs(tx.amount || 0);
+      dailyData[dateStr].incomeCount += 1;
+      totalIncomeCount++;
+    } else if (tx.type === "EXPENSE") {
+      dailyData[dateStr].expenses += Math.abs(tx.amount || 0);
+      dailyData[dateStr].expenseCount += 1;
+      totalExpenseCount++;
+    }
+  });
 
-        expenseCount: {
-          $sum: {
-            $cond: [{ $eq: ["$type", TransactionTypeEnum.EXPENSE] }, 1, 0],
-          },
-        },
-      },
-    },
-
-    { $sort: { _id: 1 } },
-
-    {
-      $project: {
-        _id: 0,
-        date: "$_id",
-        income: 1,
-        expenses: 1,
-        incomeCount: 1,
-        expenseCount: 1,
-      },
-    },
-
-    {
-      $group: {
-        _id: null,
-        chartData: { $push: "$$ROOT" },
-        totalIncomeCount: { $sum: "$incomeCount" },
-        totalExpenseCount: { $sum: "$expenseCount" },
-      },
-    },
-
-    {
-      $project: {
-        _id: 0,
-        chartData: 1,
-        totalIncomeCount: 1,
-        totalExpenseCount: 1,
-      },
-    },
-  ]);
-
-  const resultData = result[0] || {};
-
-  const transaformedData = (resultData?.chartData || []).map((item: any) => ({
-    date: item.date,
-    income: convertToDollarUnit(item.income),
-    expenses: convertToDollarUnit(item.expenses),
+  const sortedDates = Object.keys(dailyData).sort();
+  const transaformedData = sortedDates.map(date => ({
+    date,
+    income: convertToDollarUnit(dailyData[date].income),
+    expenses: convertToDollarUnit(dailyData[date].expenses),
   }));
 
   return {
     chartData: transaformedData,
-    totalIncomeCount: resultData.totalIncomeCount,
-    totalExpenseCount: resultData.totalExpenseCount,
+    totalIncomeCount,
+    totalExpenseCount,
     preset: {
       ...range,
       value: rangeValue || DateRangeEnum.ALL_TIME,
@@ -376,115 +191,55 @@ export const expensePieChartBreakdownService = async (
   const range = getDateRange(dateRangePreset, customFrom, customTo);
   const { from, to, value: rangeValue } = range;
 
-  const filter: any = {
-    userId: new mongoose.Types.ObjectId(userId),
-    type: TransactionTypeEnum.EXPENSE,
-    ...(from &&
-      to && {
-        date: {
-          $gte: from,
-          $lte: to,
-        },
-      }),
-  };
+  let query: FirebaseFirestore.Query = db.collection("transactions")
+    .where("userId", "==", userId)
+    .where("type", "==", "EXPENSE");
+  
+  if (from && to) {
+    query = query.where("date", ">=", from).where("date", "<=", to);
+  }
 
-  const pipleline: PipelineStage[] = [
-    {
-      $match: filter,
-    },
-    {
-      $group: {
-        _id: "$category",
-        value: { $sum: { $abs: "$amount" } },
-      },
-    },
-    { $sort: { value: -1 } }, //
+  const snapshot = await query.get();
+  
+  const categoryTotals: Record<string, number> = {};
+  let totalSpent = 0;
 
-    {
-      $facet: {
-        topThree: [{ $limit: 3 }],
-        others: [
-          { $skip: 3 },
-          {
-            $group: {
-              _id: "others",
-              value: { $sum: "$value" },
-            },
-          },
-        ],
-      },
-    },
+  snapshot.docs.forEach(doc => {
+    const tx = doc.data();
+    const cat = tx.category || "Uncategorized";
+    const amt = Math.abs(tx.amount || 0);
+    
+    if (!categoryTotals[cat]) {
+      categoryTotals[cat] = 0;
+    }
+    categoryTotals[cat] += amt;
+    totalSpent += amt;
+  });
 
-    {
-      $project: {
-        categories: {
-          $concatArrays: ["$topThree", "$others"],
-        },
-      },
-    },
+  const sortedCategories = Object.entries(categoryTotals)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
 
-    { $unwind: "$categories" },
+  const topThree = sortedCategories.slice(0, 3);
+  const others = sortedCategories.slice(3);
 
-    {
-      $group: {
-        _id: null,
-        totalSpent: { $sum: "$categories.value" },
-        breakdown: { $push: "$categories" },
-      },
-    },
+  let othersValue = 0;
+  others.forEach(c => othersValue += c.value);
 
-    {
-      $project: {
-        _id: 0,
-        totalSpent: 1,
-        breakdown: {
-          // .map((cat: any)=> )
-          $map: {
-            input: "$breakdown",
-            as: "cat",
-            in: {
-              name: "$$cat._id",
-              value: "$$cat.value",
-              percentage: {
-                $cond: [
-                  { $eq: ["$totalSpent", 0] },
-                  0,
-                  {
-                    $round: [
-                      {
-                        $multiply: [
-                          { $divide: ["$$cat.value", "$totalSpent"] },
-                          100,
-                        ],
-                      },
-                      0,
-                    ],
-                  },
-                ],
-              },
-            },
-          },
-        },
-      },
-    },
-  ];
+  const breakdown = [...topThree];
+  if (othersValue > 0) {
+    breakdown.push({ name: "others", value: othersValue });
+  }
 
-  const result = await TransactionModel.aggregate(pipleline);
-
-  const data = result[0] || {
-    totalSpent: 0,
-    breakdown: [],
-  };
-  const transformedData = {
-    totalSpent: convertToDollarUnit(data.totalSpent),
-    breakdown: data.breakdown.map((item: any) => ({
-      ...item,
-      value: convertToDollarUnit(item.value),
-    })),
-  };
+  const finalBreakdown = breakdown.map(cat => ({
+    name: cat.name,
+    value: convertToDollarUnit(cat.value),
+    percentage: totalSpent === 0 ? 0 : Math.round((cat.value / totalSpent) * 100)
+  }));
 
   return {
-    ...transformedData,
+    totalSpent: convertToDollarUnit(totalSpent),
+    breakdown: finalBreakdown,
     preset: {
       ...range,
       value: rangeValue || DateRangeEnum.ALL_TIME,

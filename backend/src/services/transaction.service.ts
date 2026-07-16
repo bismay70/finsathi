@@ -1,7 +1,4 @@
 import axios from "axios";
-import TransactionModel, {
-  TransactionTypeEnum,
-} from "../models/transaction.model";
 import { BadRequestException, NotFoundException } from "../utils/app-error";
 import { calculateNextOccurrence } from "../utils/helper";
 import {
@@ -11,6 +8,7 @@ import {
 import { genAI, genAIModel } from "../config/google-ai.config";
 import { createPartFromBase64, createUserContent } from "@google/genai";
 import { receiptPrompt } from "../utils/prompt";
+import { db } from "../config/firebase.config";
 
 export const createTransactionService = async (
   body: CreateTransactionType,
@@ -31,16 +29,22 @@ export const createTransactionService = async (
         : calulatedDate;
   }
 
-  const transaction = await TransactionModel.create({
+  const newTxRef = db.collection("transactions").doc();
+  const transaction = {
     ...body,
+    _id: newTxRef.id,
     userId,
     category: body.category,
     amount: Number(body.amount),
     isRecurring: body.isRecurring || false,
     recurringInterval: body.recurringInterval || null,
-    nextRecurringDate,
+    nextRecurringDate: nextRecurringDate || null,
     lastProcessed: null,
-  });
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  await newTxRef.set(transaction);
 
   return transaction;
 };
@@ -49,7 +53,7 @@ export const getAllTransactionService = async (
   userId: string,
   filters: {
     keyword?: string;
-    type?: keyof typeof TransactionTypeEnum;
+    type?: string;
     recurringStatus?: "RECURRING" | "NON_RECURRING";
   },
   pagination: {
@@ -59,40 +63,66 @@ export const getAllTransactionService = async (
 ) => {
   const { keyword, type, recurringStatus } = filters;
 
-  const filterConditions: Record<string, any> = {
-    userId,
-  };
-
-  if (keyword) {
-    filterConditions.$or = [
-      { title: { $regex: keyword, $options: "i" } },
-      { category: { $regex: keyword, $options: "i" } },
-    ];
-  }
+  let query: FirebaseFirestore.Query = db.collection("transactions").where("userId", "==", userId);
 
   if (type) {
-    filterConditions.type = type;
+    query = query.where("type", "==", type);
   }
 
   if (recurringStatus) {
     if (recurringStatus === "RECURRING") {
-      filterConditions.isRecurring = true;
+      query = query.where("isRecurring", "==", true);
     } else if (recurringStatus === "NON_RECURRING") {
-      filterConditions.isRecurring = false;
+      query = query.where("isRecurring", "==", false);
     }
+  }
+
+  // Note: Keyword search across multiple fields is not natively supported in Firestore like in MongoDB.
+  // We'll apply the keyword filter in memory after fetching, which is a compromise for this migration.
+  // We'll fetch more data than requested and paginate manually if keyword is present.
+  
+  if (keyword) {
+     const snapshot = await query.orderBy("createdAt", "desc").get();
+     let allTransactions = snapshot.docs.map(doc => doc.data() as any);
+     
+     const lowerKeyword = keyword.toLowerCase();
+     allTransactions = allTransactions.filter(tx => 
+        (tx.title && tx.title.toLowerCase().includes(lowerKeyword)) ||
+        (tx.category && tx.category.toLowerCase().includes(lowerKeyword))
+     );
+     
+     const totalCount = allTransactions.length;
+     const { pageSize, pageNumber } = pagination;
+     const totalPages = Math.ceil(totalCount / pageSize);
+     const skip = (pageNumber - 1) * pageSize;
+     
+     const transations = allTransactions.slice(skip, skip + pageSize);
+     
+     return {
+        transations,
+        pagination: {
+          pageSize,
+          pageNumber,
+          totalCount,
+          totalPages,
+          skip,
+        },
+      };
   }
 
   const { pageSize, pageNumber } = pagination;
   const skip = (pageNumber - 1) * pageSize;
 
-  const [transations, totalCount] = await Promise.all([
-    TransactionModel.find(filterConditions)
-      .skip(skip)
-      .limit(pageSize)
-      .sort({ createdAt: -1 }),
-    TransactionModel.countDocuments(filterConditions),
-  ]);
+  const countSnapshot = await query.count().get();
+  const totalCount = countSnapshot.data().count;
 
+  const snapshot = await query
+    .orderBy("createdAt", "desc")
+    .offset(skip)
+    .limit(pageSize)
+    .get();
+
+  const transations = snapshot.docs.map((doc) => doc.data());
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return {
@@ -111,11 +141,13 @@ export const getTransactionByIdService = async (
   userId: string,
   transactionId: string
 ) => {
-  const transaction = await TransactionModel.findOne({
-    _id: transactionId,
-    userId,
-  });
-  if (!transaction) throw new NotFoundException("Transaction not found");
+  const docRef = db.collection("transactions").doc(transactionId);
+  const doc = await docRef.get();
+  
+  if (!doc.exists) throw new NotFoundException("Transaction not found");
+  
+  const transaction = doc.data();
+  if (transaction?.userId !== userId) throw new NotFoundException("Transaction not found");
 
   return transaction;
 };
@@ -124,26 +156,30 @@ export const duplicateTransactionService = async (
   userId: string,
   transactionId: string
 ) => {
-  const transaction = await TransactionModel.findOne({
-    _id: transactionId,
-    userId,
-  });
-  if (!transaction) throw new NotFoundException("Transaction not found");
+  const docRef = db.collection("transactions").doc(transactionId);
+  const doc = await docRef.get();
+  
+  if (!doc.exists) throw new NotFoundException("Transaction not found");
+  
+  const transaction: any = doc.data();
+  if (transaction.userId !== userId) throw new NotFoundException("Transaction not found");
 
-  const duplicated = await TransactionModel.create({
-    ...transaction.toObject(),
-    _id: undefined,
+  const newTxRef = db.collection("transactions").doc();
+  const duplicated = {
+    ...transaction,
+    _id: newTxRef.id,
     title: `Duplicate - ${transaction.title}`,
     description: transaction.description
       ? `${transaction.description} (Duplicate)`
       : "Duplicated transaction",
     isRecurring: false,
-    recurringInterval: undefined,
-    nextRecurringDate: undefined,
-    createdAt: undefined,
-    updatedAt: undefined,
-  });
+    recurringInterval: null,
+    nextRecurringDate: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 
+  await newTxRef.set(duplicated);
   return duplicated;
 };
 
@@ -152,23 +188,24 @@ export const updateTransactionService = async (
   transactionId: string,
   body: UpdateTransactionType
 ) => {
-  const existingTransaction = await TransactionModel.findOne({
-    _id: transactionId,
-    userId,
-  });
-  if (!existingTransaction)
-    throw new NotFoundException("Transaction not found");
+  const docRef = db.collection("transactions").doc(transactionId);
+  const doc = await docRef.get();
+  
+  if (!doc.exists) throw new NotFoundException("Transaction not found");
+  
+  const existingTransaction: any = doc.data();
+  if (existingTransaction.userId !== userId) throw new NotFoundException("Transaction not found");
 
   const now = new Date();
   const isRecurring = body.isRecurring ?? existingTransaction.isRecurring;
 
   const date =
-    body.date !== undefined ? new Date(body.date) : existingTransaction.date;
+    body.date !== undefined ? body.date : existingTransaction.date;
 
   const recurringInterval =
     body.recurringInterval || existingTransaction.recurringInterval;
 
-  let nextRecurringDate: Date | undefined;
+  let nextRecurringDate: Date | null = null;
 
   if (isRecurring && recurringInterval) {
     const calulatedDate = calculateNextOccurrence(date, recurringInterval);
@@ -179,21 +216,21 @@ export const updateTransactionService = async (
         : calulatedDate;
   }
 
-  existingTransaction.set({
-    ...(body.title && { title: body.title }),
-    ...(body.description && { description: body.description }),
-    ...(body.category && { category: body.category }),
-    ...(body.type && { type: body.type }),
-    ...(body.paymentMethod && { paymentMethod: body.paymentMethod }),
-    ...(body.amount !== undefined && { amount: Number(body.amount) }),
+  const updateData: any = {
+    ...(body.title ? { title: body.title } : {}),
+    ...(body.description ? { description: body.description } : {}),
+    ...(body.category ? { category: body.category } : {}),
+    ...(body.type ? { type: body.type } : {}),
+    ...(body.paymentMethod ? { paymentMethod: body.paymentMethod } : {}),
+    ...(body.amount !== undefined ? { amount: Number(body.amount) } : {}),
     date,
     isRecurring,
     recurringInterval,
     nextRecurringDate,
-  });
+    updatedAt: new Date(),
+  };
 
-  await existingTransaction.save();
-
+  await docRef.update(updateData);
   return;
 };
 
@@ -201,12 +238,14 @@ export const deleteTransactionService = async (
   userId: string,
   transactionId: string
 ) => {
-  const deleted = await TransactionModel.findByIdAndDelete({
-    _id: transactionId,
-    userId,
-  });
-  if (!deleted) throw new NotFoundException("Transaction not found");
+  const docRef = db.collection("transactions").doc(transactionId);
+  const doc = await docRef.get();
+  
+  if (!doc.exists || doc.data()?.userId !== userId) {
+    throw new NotFoundException("Transaction not found");
+  }
 
+  await docRef.delete();
   return;
 };
 
@@ -214,17 +253,25 @@ export const bulkDeleteTransactionService = async (
   userId: string,
   transactionIds: string[]
 ) => {
-  const result = await TransactionModel.deleteMany({
-    _id: { $in: transactionIds },
-    userId,
+  const batch = db.batch();
+  
+  // We should theoretically check if all belong to userId, but for bulk delete we can just query them
+  const snapshot = await db.collection("transactions")
+    .where("userId", "==", userId)
+    .where("_id", "in", transactionIds)
+    .get();
+
+  if (snapshot.empty) throw new NotFoundException("No transations found");
+
+  snapshot.docs.forEach(doc => {
+    batch.delete(doc.ref);
   });
 
-  if (result.deletedCount === 0)
-    throw new NotFoundException("No transations found");
+  await batch.commit();
 
   return {
-    sucess: true,
-    deletedCount: result.deletedCount,
+    success: true,
+    deletedCount: snapshot.size,
   };
 };
 
@@ -233,27 +280,27 @@ export const bulkTransactionService = async (
   transactions: CreateTransactionType[]
 ) => {
   try {
-    const bulkOps = transactions.map((tx) => ({
-      insertOne: {
-        document: {
-          ...tx,
-          userId,
-          isRecurring: false,
-          nextRecurringDate: null,
-          recurringInterval: null,
-          lastProcesses: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      },
-    }));
-
-    const result = await TransactionModel.bulkWrite(bulkOps, {
-      ordered: true,
+    const batch = db.batch();
+    
+    transactions.forEach(tx => {
+      const ref = db.collection("transactions").doc();
+      batch.set(ref, {
+        ...tx,
+        _id: ref.id,
+        userId,
+        isRecurring: false,
+        nextRecurringDate: null,
+        recurringInterval: null,
+        lastProcessed: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
     });
 
+    await batch.commit();
+
     return {
-      insertedCount: result.insertedCount,
+      insertedCount: transactions.length,
       success: true,
     };
   } catch (error) {

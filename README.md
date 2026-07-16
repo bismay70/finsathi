@@ -1,6 +1,6 @@
-# 🌟 Finsathi: Advanced MERN AI Finance SaaS Platform
+# 🌟 Finsathi: Advanced AI Finance SaaS Platform
 
-Welcome to **Finsathi** , a professional-grade Personal Finance and Wealth Management SaaS platform built on the MERN stack. Finsathi leverages Artificial Intelligence to deliver automated receipt scanning, intelligent reports, and comprehensive financial analytics.
+Welcome to **Finsathi**, a professional-grade Personal Finance and Wealth Management SaaS platform. Finsathi leverages Artificial Intelligence to deliver automated OCR receipt scanning, intelligent GenAI reports, and comprehensive financial analytics.
 
 ## 📸 Platform Screenshots
 
@@ -15,10 +15,10 @@ Welcome to **Finsathi** , a professional-grade Personal Finance and Wealth Manag
 
 ## 🚀 Key Features
 
-*   **🔐 Secure Authentication**: Robust Email + Password login flow with JWT (JSON Web Tokens).
-*   **🏢 Complete Transaction Management**: Seamlessly Create, Read, Update, and Delete transactions.
-*   **📤 AI-Powered Receipt Scanning**: Upload images of receipts and instantly extract transaction data using AI.
-*   **📈 Advanced Analytics & Dashboards**: Built with powerful MongoDB Aggregate Pipelines to generate real-time metrics.
+*   **🔐 Secure Authentication**: Robust Firebase Auth integration including Email/Password and Google OAuth.
+*   **🏢 Complete Transaction Management**: Seamlessly Create, Read, Update, and Delete transactions with bulk operations.
+*   **📤 AI-Powered Receipt Scanning**: Upload images of receipts and instantly extract transaction data using Google Gemini Vision AI.
+*   **📈 Advanced Analytics & Dashboards**: Built with custom Node.js data processing engines to aggregate Firestore collections in real-time.
 *   **📊 Interactive Visualizations**: Features Beautiful Expenses Breakdown Pie Charts and Income vs. Expense Line Charts using Recharts.
 *   **📅 Dynamic Filtering**: Easily filter data by custom date ranges (e.g., Last 30 Days, Year-to-Date).
 *   **♻️ Recurring Transactions**: Automated transaction logging using robust Cron Jobs.
@@ -47,8 +47,8 @@ Finsathi/
 ├── backend/                # Backend (Node.js/Express)
 │   ├── src/
 │   │   ├── controllers/    # Request handlers & logic
-│   │   ├── models/         # Mongoose Database Schemas
-│   │   ├── routes/         # API Route definitions
+│   │   ├── types/          # TypeScript Enums and Definitions
+│   │   ├── routes/         # 18 Specialized API Route endpoints
 │   │   ├── services/       # Business logic (AI receipt scanning, emails)
 │   │   ├── middleware/     # Auth, Validation, & Error handling
 │   │   └── index.ts        # Server entry point
@@ -75,21 +75,20 @@ graph TD
     end
     
     subgraph Backend [Backend: Node.js]
-        Express --> Auth[JWT Authentication]
+        Express --> Auth[Firebase Authentication]
         Express --> Controllers[Controllers & Routing]
         Controllers --> Services[Business Logic]
         Services --> CRON[Node-Cron Tasks]
     end
     
     subgraph Database [Data Layer]
-        Services -->|Mongoose| MongoDB[(MongoDB Cluster)]
+        Services -->|Firebase Admin SDK| Firestore[(Firebase Firestore)]
     end
     
     subgraph External Services [3rd Party APIs]
         Services --> Cloudinary[Cloudinary: Images]
         Services --> Resend[Resend: Emails]
-        Services --> AI[AI Vision / OCR Services]
-        Services --> Stripe[Stripe: Subscriptions]
+        Services --> AI[Google Gemini GenAI / OCR]
     end
 ```
 
@@ -103,10 +102,10 @@ graph TD
 | **Styling & UI** | Tailwind CSS v4, Shadcn UI, Radix Primitives, Lucide Icons |
 | **State Management** | Redux Toolkit, Redux Persist |
 | **Data Visualization** | Recharts |
-| **Backend Core** | Node.js, Express.js |
-| **Database** | MongoDB, Mongoose |
-| **Authentication** | JSON Web Tokens (JWT), Bcrypt |
-| **External Integrations** | Cloudinary (Media), Resend (Emails), Stripe (Billing) |
+| **Backend Core** | Node.js, Express.js, TypeScript |
+| **Database** | Firebase Firestore |
+| **Authentication** | Firebase Authentication |
+| **External Integrations** | Cloudinary (Media), Resend (Emails), Google GenAI SDK |
 
 ---
 
@@ -115,8 +114,7 @@ graph TD
 ### 1. Prerequisites
 Ensure you have the following installed:
 *   Node.js (v18+)
-*   MongoDB (Local or Atlas URL)
-*   Stripe Account (for premium features)
+*   Firebase Project Credentials (Admin SDK json)
 *   Cloudinary Account (for media)
 
 ### 2. Environment Setup

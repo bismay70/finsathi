@@ -1,6 +1,5 @@
-import mongoose from "mongoose";
-import TransactionModel from "../../models/transaction.model";
 import { calculateNextOccurrence } from "../../utils/helper";
+import { db } from "../../config/firebase.config";
 
 export const processRecurringTransactions = async () => {
   const now = new Date();
@@ -8,64 +7,47 @@ export const processRecurringTransactions = async () => {
   let failedCount = 0;
 
   try {
-    const transactionCursor = TransactionModel.find({
-      isRecurring: true,
-      nextRecurringDate: { $lte: now },
-    }).cursor();
+    const snapshot = await db.collection("transactions")
+      .where("isRecurring", "==", true)
+      .where("nextRecurringDate", "<=", now)
+      .get();
 
-    console.log("Starting recurring proccess");
+    console.log("Starting recurring process");
 
-    for await (const tx of transactionCursor) {
+    for (const doc of snapshot.docs) {
+      const tx = doc.data();
       const nextDate = calculateNextOccurrence(
-        tx.nextRecurringDate!,
-        tx.recurringInterval!
+        tx.nextRecurringDate.toDate ? tx.nextRecurringDate.toDate() : new Date(tx.nextRecurringDate),
+        tx.recurringInterval
       );
 
-      const session = await mongoose.startSession();
+      const batch = db.batch();
       try {
-        await session.withTransaction(
-          async () => {
-            // console.log(tx, "transaction");
-            await TransactionModel.create(
-              [
-                {
-                  ...tx.toObject(),
-                  _id: new mongoose.Types.ObjectId(),
-                  title: `Recurring - ${tx.title}`,
-                  date: tx.nextRecurringDate,
-                  isRecurring: false,
-                  nextRecurringDate: null,
-                  recurringInterval: null,
-                  lastProcessed: null,
-                  createdAt: undefined,
-                  updatedAt: undefined,
-                },
-              ],
-              { session }
-            );
+        const newTxRef = db.collection("transactions").doc();
+        batch.set(newTxRef, {
+          ...tx,
+          _id: newTxRef.id,
+          title: `Recurring - ${tx.title}`,
+          date: tx.nextRecurringDate,
+          isRecurring: false,
+          nextRecurringDate: null,
+          recurringInterval: null,
+          lastProcessed: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
 
-            await TransactionModel.updateOne(
-              { _id: tx._id },
-              {
-                $set: {
-                  nextRecurringDate: nextDate,
-                  lastProcessed: now,
-                },
-              },
-              { session }
-            );
-          },
-          {
-            maxCommitTimeMS: 20000,
-          }
-        );
+        batch.update(doc.ref, {
+          nextRecurringDate: nextDate,
+          lastProcessed: now,
+          updatedAt: new Date(),
+        });
 
+        await batch.commit();
         processedCount++;
       } catch (error: any) {
         failedCount++;
-        console.log(`Failed reccurring tx: ${tx._id}`, error);
-      } finally {
-        await session.endSession();
+        console.log(`Failed recurring tx: ${tx._id}`, error);
       }
     }
 

@@ -1,9 +1,3 @@
-import mongoose from "mongoose";
-import ReportSettingModel from "../models/report-setting.model";
-import ReportModel from "../models/report.model";
-import TransactionModel, {
-  TransactionTypeEnum,
-} from "../models/transaction.model";
 import { NotFoundException } from "../utils/app-error";
 import { calulateNextReportDate } from "../utils/helper";
 import { UpdateReportSettingType } from "../validators/report.validator";
@@ -12,6 +6,7 @@ import { format } from "date-fns";
 import { genAI, genAIModel } from "../config/google-ai.config";
 import { createUserContent } from "@google/genai";
 import { reportInsightPrompt } from "../utils/prompt";
+import { db } from "../config/firebase.config";
 
 export const getAllReportsService = async (
   userId: string,
@@ -20,16 +15,21 @@ export const getAllReportsService = async (
     pageNumber: number;
   }
 ) => {
-  const query: Record<string, any> = { userId };
+  const query = db.collection("reports").where("userId", "==", userId);
 
   const { pageSize, pageNumber } = pagination;
   const skip = (pageNumber - 1) * pageSize;
 
-  const [reports, totalCount] = await Promise.all([
-    ReportModel.find(query).skip(skip).limit(pageSize).sort({ createdAt: -1 }),
-    ReportModel.countDocuments(query),
-  ]);
+  const countSnapshot = await query.count().get();
+  const totalCount = countSnapshot.data().count;
 
+  const snapshot = await query
+    .orderBy("createdAt", "desc")
+    .offset(skip)
+    .limit(pageSize)
+    .get();
+
+  const reports = snapshot.docs.map((doc) => doc.data());
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return {
@@ -51,22 +51,26 @@ export const updateReportSettingService = async (
   const { isEnabled } = body;
   let nextReportDate: Date | null = null;
 
-  const existingReportSetting = await ReportSettingModel.findOne({
-    userId,
-  });
-  if (!existingReportSetting)
-    throw new NotFoundException("Report setting not found");
-
-  //   const frequency =
-  //     existingReportSetting.frequency || ReportFrequencyEnum.MONTHLY;
+  const docRef = db.collection("report_settings").doc(userId);
+  const doc = await docRef.get();
+  
+  if (!doc.exists) throw new NotFoundException("Report setting not found");
+  
+  const existingReportSetting: any = doc.data();
 
   if (isEnabled) {
-    const currentNextReportDate = existingReportSetting.nextReportDate;
+    // Handle Firestore timestamp parsing safely
+    const currentNextReportDate = existingReportSetting.nextReportDate?.toDate 
+        ? existingReportSetting.nextReportDate.toDate() 
+        : (existingReportSetting.nextReportDate ? new Date(existingReportSetting.nextReportDate) : null);
+        
+    const lastSentDate = existingReportSetting.lastSentDate?.toDate
+        ? existingReportSetting.lastSentDate.toDate()
+        : (existingReportSetting.lastSentDate ? new Date(existingReportSetting.lastSentDate) : null);
+
     const now = new Date();
     if (!currentNextReportDate || currentNextReportDate <= now) {
-      nextReportDate = calulateNextReportDate(
-        existingReportSetting.lastSentDate
-      );
+      nextReportDate = calulateNextReportDate(lastSentDate);
     } else {
       nextReportDate = currentNextReportDate;
     }
@@ -74,12 +78,11 @@ export const updateReportSettingService = async (
 
   console.log(nextReportDate, "nextReportDate");
 
-  existingReportSetting.set({
+  await docRef.update({
     ...body,
     nextReportDate,
+    updatedAt: new Date(),
   });
-
-  await existingReportSetting.save();
 };
 
 export const generateReportService = async (
@@ -87,89 +90,40 @@ export const generateReportService = async (
   fromDate: Date,
   toDate: Date
 ) => {
-  const results = await TransactionModel.aggregate([
-    {
-      $match: {
-        userId: new mongoose.Types.ObjectId(userId),
-        date: { $gte: fromDate, $lte: toDate },
-      },
-    },
-    {
-      $facet: {
-        summary: [
-          {
-            $group: {
-              _id: null,
-              totalIncome: {
-                $sum: {
-                  $cond: [
-                    { $eq: ["$type", TransactionTypeEnum.INCOME] },
-                    { $abs: "$amount" },
-                    0,
-                  ],
-                },
-              },
+  
+  const snapshot = await db.collection("transactions")
+    .where("userId", "==", userId)
+    .where("date", ">=", fromDate)
+    .where("date", "<=", toDate)
+    .get();
 
-              totalExpenses: {
-                $sum: {
-                  $cond: [
-                    { $eq: ["$type", TransactionTypeEnum.EXPENSE] },
-                    { $abs: "$amount" },
-                    0,
-                  ],
-                },
-              },
-            },
-          },
-        ],
+  const transactions = snapshot.docs.map(doc => doc.data());
 
-        categories: [
-          {
-            $match: { type: TransactionTypeEnum.EXPENSE },
-          },
-          {
-            $group: {
-              _id: "$category",
-              total: { $sum: { $abs: "$amount" } },
-            },
-          },
-          {
-            $sort: { total: -1 },
-          },
-          {
-            $limit: 5,
-          },
-        ],
-      },
-    },
-    {
-      $project: {
-        totalIncome: {
-          $arrayElemAt: ["$summary.totalIncome", 0],
-        },
-        totalExpenses: {
-          $arrayElemAt: ["$summary.totalExpenses", 0],
-        },
-        categories: 1,
-      },
-    },
-  ]);
+  if (transactions.length === 0) return null;
 
-  if (
-    !results?.length ||
-    (results[0]?.totalIncome === 0 && results[0]?.totalExpenses === 0)
-  )
-    return null;
+  let totalIncome = 0;
+  let totalExpenses = 0;
+  const categoryMap: Record<string, number> = {};
 
-  const {
-    totalIncome = 0,
-    totalExpenses = 0,
-    categories = [],
-  } = results[0] || {};
+  transactions.forEach((tx: any) => {
+    if (tx.type === "INCOME") {
+      totalIncome += Math.abs(tx.amount || 0);
+    } else if (tx.type === "EXPENSE") {
+      const amt = Math.abs(tx.amount || 0);
+      totalExpenses += amt;
+      const cat = tx.category || "Uncategorized";
+      categoryMap[cat] = (categoryMap[cat] || 0) + amt;
+    }
+  });
 
-  console.log(results[0], "results");
+  if (totalIncome === 0 && totalExpenses === 0) return null;
 
-  const byCategory = categories.reduce(
+  const sortedCategories = Object.entries(categoryMap)
+    .map(([name, total]) => ({ _id: name, total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+
+  const byCategory = sortedCategories.reduce(
     (acc: any, { _id, total }: any) => {
       acc[_id] = {
         amount: convertToDollarUnit(total),

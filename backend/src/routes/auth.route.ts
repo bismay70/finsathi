@@ -1,12 +1,8 @@
 import { Router } from "express";
-import {
-  loginController,
-  registerController,
-} from "../controllers/auth.controller";
+import { syncUserController } from "../controllers/auth.controller";
 
 const authRoutes = Router();
 
-authRoutes.post("/register", registerController);
-authRoutes.post("/login", loginController);
+authRoutes.post("/sync-user", syncUserController);
 
 export default authRoutes;

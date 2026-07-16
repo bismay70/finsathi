@@ -1,9 +1,9 @@
 import { z } from "zod";
 import {
   PaymentMethodEnum,
-  RecurringIntervalEnum,
+  TransactionRecurringIntervalEnum,
   TransactionTypeEnum,
-} from "../models/transaction.model";
+} from "../types";
 
 export const transactionIdSchema = z.string().trim().min(1);
 
@@ -23,10 +23,10 @@ export const baseTransactionSchema = z.object({
   isRecurring: z.boolean().default(false),
   recurringInterval: z
     .enum([
-      RecurringIntervalEnum.DAILY,
-      RecurringIntervalEnum.WEEKLY,
-      RecurringIntervalEnum.MONTHLY,
-      RecurringIntervalEnum.YEARLY,
+      TransactionRecurringIntervalEnum.DAILY,
+      TransactionRecurringIntervalEnum.WEEKLY,
+      TransactionRecurringIntervalEnum.MONTHLY,
+      TransactionRecurringIntervalEnum.YEARLY,
     ])
     .nullable()
     .optional(),

@@ -1,35 +1,28 @@
 import { Request, Response } from "express";
 import { HTTPSTATUS } from "../config/http.config";
 import { asyncHandler } from "../middlewares/asyncHandler.middlerware";
-import { loginSchema, registerSchema } from "../validators/auth.validator";
-import { loginService, registerService } from "../services/auth.service";
+import { syncUserService } from "../services/auth.service";
 
-export const registerController = asyncHandler(
+export const syncUserController = asyncHandler(
   async (req: Request, res: Response) => {
-    const body = registerSchema.parse(req.body);
+    // req.user might already exist if it's an existing user, 
+    // but the token is verified in the middleware. 
+    // Wait, firebaseAuthMiddleware throws if user doesn't exist in DB.
+    // For sync-user, it might be a NEW user! 
+    // We need a specific middleware or logic in controller for syncing.
+    // Let's modify the controller to extract the token directly.
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split("Bearer ")[1];
+    
+    if (!token) {
+      return res.status(HTTPSTATUS.UNAUTHORIZED).json({ message: "No token provided" });
+    }
 
-    const result = await registerService(body);
-
-    return res.status(HTTPSTATUS.CREATED).json({
-      message: "User registered successfully",
-      data: result,
-    });
-  }
-);
-
-export const loginController = asyncHandler(
-  async (req: Request, res: Response) => {
-    const body = loginSchema.parse({
-      ...req.body,
-    });
-    const { user, accessToken, expiresAt, reportSetting } =
-      await loginService(body);
+    const { user, reportSetting } = await syncUserService(token, req.body);
 
     return res.status(HTTPSTATUS.OK).json({
-      message: "User logged in successfully",
+      message: "User synced successfully",
       user,
-      accessToken,
-      expiresAt,
       reportSetting,
     });
   }
