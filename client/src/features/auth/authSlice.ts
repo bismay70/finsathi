@@ -21,9 +21,14 @@ interface ReportSetting {
 }
 
 const initialState: AuthState = {
-  accessToken: null,
-  expiresAt: null,
-  user: null,
+  accessToken: "mock-token",
+  expiresAt: Date.now() + 1000 * 60 * 60 * 24,
+  user: {
+    id: 1,
+    name: "Mock User",
+    email: "mock@example.com",
+    profilePicture: "",
+  },
   reportSetting: null,
 };
 

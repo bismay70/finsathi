@@ -4,6 +4,8 @@ import SignUp from "@/pages/auth/sign-up";
 import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 import Transactions from "@/pages/transactions";
+
+import TradingDashboard from "@/pages/trading";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import Account from "@/pages/settings/account";
@@ -21,8 +23,17 @@ export const protectedRoutePaths = [
   { path: PROTECTED_ROUTES.HOME, element: <Home /> },
   { path: PROTECTED_ROUTES.PREVIEW_DASHBOARD, element: <DashboardPreview /> },
   { path: PROTECTED_ROUTES.OVERVIEW, element: <Dashboard /> },
-  { path: PROTECTED_ROUTES.TRANSACTIONS, element: <Transactions /> },
-  { path: PROTECTED_ROUTES.REPORTS, element: <Reports /> },
+  {
+    path: PROTECTED_ROUTES.TRANSACTIONS,
+    element: <Transactions />,
+  },
+
+  {
+    path: PROTECTED_ROUTES.TRADING,
+    element: <TradingDashboard />,
+  },
+  {
+    path: PROTECTED_ROUTES.REPORTS, element: <Reports /> },
   { path: PROTECTED_ROUTES.SETTINGS, 
     element: <Settings /> ,
     children: [

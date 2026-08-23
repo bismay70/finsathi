@@ -30,6 +30,11 @@ const Navbar = () => {
       href: PROTECTED_ROUTES.TRANSACTIONS,
       label: "Transactions",
     },
+
+    {
+      href: PROTECTED_ROUTES.TRADING,
+      label: "Trading",
+    },
     {
       href: PROTECTED_ROUTES.REPORTS,
       label: "Reports",

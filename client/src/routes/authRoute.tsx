@@ -5,8 +5,7 @@ import { PROTECTED_ROUTES } from "./common/routePath";
 const AuthRoute = () => {
   const { accessToken, user } = useTypedSelector((state) => state.auth);
 
-  if (!accessToken && !user) return <Outlet />;
-
+  // BYPASS AUTHENTICATION FOR DEVELOPMENT: always redirect from auth pages to home
   return <Navigate to={PROTECTED_ROUTES.HOME} replace />;
 };
 

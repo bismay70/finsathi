@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: finsathi_backend
+    ports:
+      - "8000:8000"
+    environment:
+      # We override the REDIS_URL to point to the local Redis container
+      - REDIS_URL=redis://redis:6379
+    # Pulls all other secrets (Firebase, MongoDB, JWT) from your local .env file
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - redis
+    networks:
+      - finsathi-network
+
+  client:
+    build: ./client
+    container_name: finsathi_client
+    ports:
+      # Mapping port 5173 on your local machine to port 80 in the Nginx container
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - finsathi-network
+
+  redis:
+    image: redis:alpine
+    container_name: finsathi_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - finsathi-network
+
+networks:
+  finsathi-network:
+    driver: bridge

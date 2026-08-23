@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { NextFunction, Request, Response } from "express";
+import { createServer } from "http";
 import cors from "cors";
 import { Env } from "./config/env.config";
 import { HTTPSTATUS } from "./config/http.config";
@@ -14,6 +15,9 @@ import { initializeCrons } from "./cron";
 import reportRoutes from "./routes/report.route";
 import { getDateRange } from "./utils/date";
 import analyticsRoutes from "./routes/analytics.route";
+import chatRoutes from "./routes/chat.route";
+import tradingRoutes from "./routes/trading.route";
+import { initSocket } from "./socket";
 
 const app = express();
 const BASE_PATH = Env.BASE_PATH;
@@ -43,13 +47,19 @@ app.use(`${BASE_PATH}/user`, firebaseAuthMiddleware, userRoutes);
 app.use(`${BASE_PATH}/transaction`, firebaseAuthMiddleware, transactionRoutes);
 app.use(`${BASE_PATH}/report`, firebaseAuthMiddleware, reportRoutes);
 app.use(`${BASE_PATH}/analytics`, firebaseAuthMiddleware, analyticsRoutes);
+app.use(`${BASE_PATH}/chat`, firebaseAuthMiddleware, chatRoutes);
+app.use(`${BASE_PATH}/trading`, firebaseAuthMiddleware, tradingRoutes);
 
 app.use(errorHandler);
 
-app.listen(Env.PORT, async () => {
+const server = createServer(app);
+
+server.listen(Env.PORT, async () => {
   if (Env.NODE_ENV === "development") {
     await initializeCrons();
   }
+
+  await initSocket(server);
 
   console.log(`Server is running on port ${Env.PORT} in ${Env.NODE_ENV} mode`);
 });
