@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Shield, Zap, BarChart3, ChevronRight } from "lucide-react";
 
 const useCases = [
   {
@@ -25,16 +25,92 @@ const useCases = [
   },
 ];
 
+function HeroSection() {
+  return (
+    <div className="relative w-full min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-[#09090b] overflow-hidden">
+      {/* Dynamic Background Elements */}
+      <div className="absolute top-1/4 -left-1/4 w-[50vw] h-[50vw] bg-[#CCFF00]/10 rounded-full blur-[120px] mix-blend-screen pointer-events-none" />
+      <div className="absolute bottom-1/4 -right-1/4 w-[50vw] h-[50vw] bg-blue-500/10 rounded-full blur-[120px] mix-blend-screen pointer-events-none" />
+      
+      {/* Grid Pattern */}
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMSIgZmlsbD0icmdiYSgyNTUsIDI1NSwgMjU1LCAwLjEpIi8+PC9zdmc+')] opacity-50 z-0" />
+
+      <div className="relative z-10 w-full max-w-5xl mx-auto px-6 text-center flex flex-col items-center">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[#CCFF00] text-sm font-medium mb-8 backdrop-blur-md">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#CCFF00] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#CCFF00]"></span>
+          </span>
+          Introducing Finsathi AI 2.0
+        </div>
+        
+        <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold text-white tracking-tight leading-[1.1] mb-8">
+          Master Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#CCFF00] to-green-400">Wealth</span><br />
+          With Intelligence
+        </h1>
+        
+        <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mb-12 leading-relaxed">
+          The all-in-one AI financial SaaS platform that helps you track expenses, scan receipts, and generate intelligent reports to achieve financial freedom.
+        </p>
+        
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-center w-full">
+          <Link to="/overview">
+            <Button size="lg" className="rounded-full bg-[#CCFF00] hover:bg-[#b3e600] text-black px-8 py-6 text-base font-bold shadow-[0_0_40px_rgba(204,255,0,0.3)] transition-all hover:scale-105 group">
+              Go to Dashboard
+              <ArrowUpRight className="ml-2 size-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+            </Button>
+          </Link>
+          <a href="#features">
+            <Button size="lg" variant="outline" className="rounded-full bg-white/5 border-white/20 text-white hover:bg-white/10 px-8 py-6 text-base font-semibold backdrop-blur-md transition-all">
+              Explore Features
+            </Button>
+          </a>
+        </div>
+      </div>
+      
+      {/* Decorative Bottom Fade */}
+      <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-white to-transparent z-10" />
+    </div>
+  );
+}
+
+function FeatureShowcase() {
+  const features = [
+    { icon: <Shield className="size-6 text-[#CCFF00]" />, title: "Bank-Grade Security", desc: "Your financial data is encrypted and stored with the highest security standards." },
+    { icon: <Zap className="size-6 text-[#CCFF00]" />, title: "Real-time AI Analysis", desc: "Instant insights on your spending habits with our advanced AI engine." },
+    { icon: <BarChart3 className="size-6 text-[#CCFF00]" />, title: "Smart Reporting", desc: "Generate comprehensive visual reports to understand your cash flow." }
+  ];
+
+  return (
+    <section id="features" className="bg-white py-24 w-full">
+      <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-12">
+        {features.map((f, i) => (
+          <div key={i} className="flex flex-col items-start p-6 rounded-2xl bg-zinc-50 border border-zinc-100 hover:shadow-xl hover:shadow-zinc-200/50 transition-all duration-300 group">
+            <div className="p-3 bg-black rounded-xl mb-6 shadow-md group-hover:scale-110 transition-transform">
+              {f.icon}
+            </div>
+            <h3 className="text-xl font-bold text-zinc-900 mb-3">{f.title}</h3>
+            <p className="text-zinc-500 leading-relaxed">{f.desc}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function UseCasesSection() {
   return (
-    <section className="bg-white w-full" id="dashboards">
-      {/* 2 Column Grid acting like a premium bento box */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-1 bg-white p-1">
+    <section className="bg-white w-full pb-24" id="dashboards">
+      <div className="max-w-6xl mx-auto px-6 mb-12">
+         <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-zinc-900 mb-4">Powerful Workflows</h2>
+         <p className="text-zinc-500 text-lg max-w-2xl">Discover how Finsathi can transform your financial life with tailored solutions.</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-7xl mx-auto px-6">
         {useCases.map((useCase, index) => (
           <Link
             to={useCase.href}
             key={index}
-            className="group relative h-[60vh] md:h-[70vh] w-full overflow-hidden flex flex-col justify-end p-8 md:p-12 block"
+            className="group relative h-[50vh] md:h-[60vh] w-full rounded-3xl overflow-hidden flex flex-col justify-end p-8 md:p-10 block"
           >
             {/* Background Image / Video */}
             <div className="absolute inset-0 z-0">
@@ -43,19 +119,17 @@ function UseCasesSection() {
                 alt={useCase.title}
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
               />
-              {/* Dark gradient overlay for text readability */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/30 to-black/90" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/40 to-black/90 group-hover:to-black/95 transition-colors" />
             </div>
 
             {/* Content */}
             <div className="relative z-10 max-w-2xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
-              <h2 className="text-4xl md:text-5xl lg:text-[3.5rem] font-sans font-bold text-white leading-[1.1] tracking-tight mb-8">
+              <h2 className="text-3xl md:text-4xl font-bold text-white leading-tight mb-6">
                 {useCase.title}
               </h2>
-
-              <button className="flex items-center gap-3 px-6 py-3 border border-white/30 rounded-md text-white font-medium text-sm hover:bg-white/10 hover:border-white transition-all backdrop-blur-sm pointer-events-none">
-                See Feature
-                <ArrowUpRight className="size-4" />
+              <button className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-black font-semibold text-sm hover:bg-[#CCFF00] transition-colors pointer-events-none">
+                Explore Now
+                <ChevronRight className="size-4" />
               </button>
             </div>
           </Link>
@@ -181,7 +255,7 @@ const testimonialCards = [
 function TestimonialSection() {
   return (
     <section className="bg-[#050508] overflow-hidden relative py-24">
-      <div className="absolute inset-0 flex flex-col items-center pt-[5vw] z-0 opacity-20 pointer-events-none">
+      <div className="absolute inset-0 flex flex-col items-center pt-[5vw] z-0 opacity-10 pointer-events-none">
         <h1 className="text-white text-[15vw] font-bold leading-none tracking-tighter">
           Real
         </h1>
@@ -197,30 +271,33 @@ function TestimonialSection() {
         {testimonialCards.map((card, index) => (
           <div
             key={index}
-            className="relative bg-black/45 backdrop-blur-md p-6 rounded-2xl border border-white/20 transition-transform hover:scale-105"
+            className="relative bg-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/10 hover:border-[#CCFF00]/30 transition-all duration-300 hover:-translate-y-2 group"
           >
-            <div className="flex items-start gap-4 mb-4">
+            <div className="flex items-start gap-5 mb-6">
               <img 
                 src={card.img} 
                 alt={card.name} 
-                className="w-16 h-16 rounded-full object-cover border-2 border-[#CCFF00]/50"
+                className="w-16 h-16 rounded-full object-cover border-2 border-[#CCFF00]/50 group-hover:border-[#CCFF00] transition-colors"
               />
               <div>
                 <p className="text-[#CCFF00] text-[10px] font-bold uppercase tracking-widest mb-1">
                   Verified User: {card.name}
                 </p>
-                <h3 className="text-white font-bold text-lg leading-tight">
+                <h3 className="text-white font-bold text-xl leading-tight">
                   {card.incident}
                 </h3>
               </div>
             </div>
 
-            <p className="text-gray-200 text-sm mt-2 leading-relaxed">
+            <p className="text-gray-300 text-base leading-relaxed">
               "{card.desc}"
             </p>
 
-            <div className="mt-6 flex items-center justify-between text-xs text-gray-400 font-medium">
-              <span>{card.location}</span>
+            <div className="mt-8 flex items-center justify-between text-sm text-gray-500 font-medium">
+              <span className="flex items-center gap-1">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                {card.location}
+              </span>
               <span>{card.time}</span>
             </div>
           </div>
@@ -232,27 +309,9 @@ function TestimonialSection() {
 
 const Home = () => {
   return (
-    <div className="bg-white font-sans text-black selection:bg-[#CCFF00] selection:text-black rounded-xl border border-gray-100 shadow-sm overflow-y-auto h-[calc(100vh-4rem)]">
-      {/* Hero Section */}
-      <div className="relative w-full h-[calc(100vh-4rem)] flex flex-col items-center justify-end pb-16">
-        <video 
-          src="/finsathi.mp4#t=1" 
-          autoPlay 
-          loop 
-          muted 
-          playsInline 
-          className="absolute inset-0 w-full h-full object-cover z-0"
-        />
-        
-        <div className="relative z-10">
-          <Link to="/overview">
-            <Button size="lg" className="rounded-md bg-white/10 backdrop-blur-md border border-white/20 px-8 py-6 text-sm font-semibold text-white shadow-sm hover:bg-white/20 uppercase tracking-widest">
-              Go to Dashboard
-            </Button>
-          </Link>
-        </div>
-      </div>
-
+    <div className="bg-white font-sans text-black selection:bg-[#CCFF00] selection:text-black rounded-xl border border-gray-100 shadow-sm overflow-y-auto h-[calc(100vh-4rem)] scroll-smooth">
+      <HeroSection />
+      <FeatureShowcase />
       <UseCasesSection />
       <TestimonialSection />
       <Footer />

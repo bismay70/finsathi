@@ -28,3 +28,14 @@ dist-ssr
 chroma_db/
 .env
 .env.local
+.claude
+.claude/*
+
+
+p.md
+ex.md
+d.md
+Int.md
+futureimp.md
+PRD.md
+s.md

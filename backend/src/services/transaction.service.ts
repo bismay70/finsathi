@@ -338,54 +338,118 @@ export const scanReceiptService = async (
   try {
     if (!file.path) throw new BadRequestException("failed to upload file");
 
-    console.log(file.path);
+    console.log("Processing receipt from:", file.path);
 
     const responseData = await axios.get(file.path, {
       responseType: "arraybuffer",
     });
 
+    // ── Step 1: Try Tesseract OCR (free, local) ──────────────────────────────
     try {
       console.log("Attempting OCR with Tesseract.js...");
-      const { data: { text } } = await Tesseract.recognize(Buffer.from(responseData.data), 'eng');
-      console.log("Tesseract raw text length:", text.length);
-      
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-      let total: number | null = null;
-      let date: string | null = null;
-      
-      lines.forEach(line => {
-        const totalMatch = line.match(/total\s*[:$]?\s*([0-9,]+\.[0-9]{2})/i);
-        if (totalMatch && !total) {
-          total = parseFloat(totalMatch[1].replace(/,/g, ''));
+      const { data: { text, confidence } } = await Tesseract.recognize(
+        Buffer.from(responseData.data),
+        "eng",
+        { logger: (m) => { if (m.status === "recognizing text") console.log(`Tesseract progress: ${Math.round(m.progress * 100)}%`); } }
+      );
+
+      console.log(`Tesseract OCR complete. Confidence: ${confidence.toFixed(1)}%, Text length: ${text.length}`);
+
+      if (text.length > 20) {
+        const lines = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+
+        // --- Extract Total Amount ---
+        let total: number | null = null;
+        const amountPatterns = [
+          /(?:total|amount|grand\s*total|balance\s*due|total\s*due|subtotal|sum)\s*[:\-]?\s*[$€£₹]?\s*([0-9,]+\.[0-9]{1,2})/i,
+          /[$€£₹]\s*([0-9,]+\.[0-9]{1,2})\s*$/,
+          /([0-9,]+\.[0-9]{2})\s*(?:USD|EUR|GBP|INR)?\s*$/,
+        ];
+        for (const line of lines) {
+          for (const pattern of amountPatterns) {
+            const match = line.match(pattern);
+            if (match && !total) {
+              const val = parseFloat(match[1].replace(/,/g, ""));
+              if (val > 0 && val < 1_000_000) { total = val; break; }
+            }
+          }
+          if (total) break;
         }
-        
-        const dateMatch = line.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
-        if (dateMatch && !date) {
-          date = dateMatch[1];
+
+        // --- Extract Date ---
+        let date: string | null = null;
+        const datePatterns = [
+          /\b(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})\b/,          // YYYY-MM-DD
+          /\b(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})\b/,          // DD-MM-YYYY or MM-DD-YYYY
+          /\b(\d{1,2}[-\/]\d{1,2}[-\/]\d{2})\b/,           // DD-MM-YY
+          /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})\b/i,
+          /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b/i,
+        ];
+        for (const line of lines) {
+          for (const pattern of datePatterns) {
+            const match = line.match(pattern);
+            if (match && !date) {
+              // Try to parse and normalize to ISO format
+              const parsed = new Date(match[0]);
+              if (!isNaN(parsed.getTime())) {
+                date = parsed.toISOString().split("T")[0];
+              } else {
+                date = match[1] || match[0];
+              }
+              break;
+            }
+          }
+          if (date) break;
         }
-      });
-      
-      if (total && date) {
-        console.log("Tesseract OCR succeeded!", { total, date });
-        return {
-          title: "Receipt (Tesseract OCR)",
-          amount: total,
-          date: date,
-          description: "Parsed via local Tesseract engine",
-          category: "Other", 
-          paymentMethod: "Cash",
-          type: "expense",
-          receiptUrl: file.path,
-        };
-      } else {
-         console.log("Tesseract OCR could not confidently extract total and date. Falling back to Gemini AI...");
+
+        // --- Extract Merchant/Title (first meaningful non-date, non-amount line) ---
+        let title = "Receipt";
+        const skipPatterns = /^\d|^[$€£₹#*-]|receipt|invoice|tax|total|subtotal|change|cash|card|thank|welcome|visit|tel|phone|vat|gst/i;
+        for (const line of lines.slice(0, 8)) {
+          if (line.length > 3 && line.length < 60 && !skipPatterns.test(line)) {
+            title = line.replace(/[^a-zA-Z0-9\s&'.,-]/g, "").trim();
+            if (title.length > 2) break;
+          }
+        }
+
+        // --- Determine Category from text ---
+        const fullText = text.toLowerCase();
+        let category = "Other";
+        if (/grocery|supermarket|food|mart|walmart|target|kroger|safeway|whole\s*food/i.test(fullText)) category = "Groceries";
+        else if (/restaurant|cafe|coffee|diner|pizza|burger|sushi|bar|grill|kitchen|bistro|eat/i.test(fullText)) category = "Food & Dining";
+        else if (/fuel|gas\s*station|petrol|shell|bp|chevron|exxon/i.test(fullText)) category = "Transport";
+        else if (/pharmacy|medical|clinic|hospital|health|drug|cvs|walgreens/i.test(fullText)) category = "Healthcare";
+        else if (/amazon|ebay|shop|store|mall|retail|purchase|buy/i.test(fullText)) category = "Shopping";
+        else if (/utility|electric|water|internet|phone|bill|service/i.test(fullText)) category = "Bills & Utilities";
+
+        // --- Determine Payment Method ---
+        let paymentMethod = "Cash";
+        if (/visa|mastercard|amex|credit\s*card|debit\s*card|card\s*ending|xxxx/i.test(fullText)) paymentMethod = "Card";
+        else if (/upi|gpay|paytm|phonepe|neft|rtgs|transfer/i.test(fullText)) paymentMethod = "UPI";
+
+        if (total && date) {
+          console.log("✅ Tesseract OCR successfully extracted:", { title, total, date, category });
+          return {
+            title,
+            amount: total,
+            date,
+            description: `Scanned receipt from ${title}`,
+            category,
+            paymentMethod,
+            type: "expense",
+            receiptUrl: file.path,
+          };
+        } else {
+          console.log(`⚠️ Tesseract extracted partial data (total: ${total}, date: ${date}). Falling back to Gemini AI...`);
+        }
       }
     } catch (err) {
-      console.error("Tesseract parsing failed, falling back to Gemini", err);
+      console.error("Tesseract OCR failed, falling back to Gemini AI:", err);
     }
 
+    // ── Step 2: Fallback to Gemini AI (vision) ──────────────────────────────
+    console.log("Using Gemini AI Vision for receipt scanning...");
     const base64String = Buffer.from(responseData.data).toString("base64");
-
     if (!base64String) throw new BadRequestException("Could not process file");
 
     const result = await genAI.models.generateContent({
@@ -406,15 +470,12 @@ export const scanReceiptService = async (
     const response = result.text;
     const cleanedText = response?.replace(/```(?:json)?\n?/g, "").trim();
 
-    if (!cleanedText)
-      return {
-        error: "Could not read reciept  content",
-      };
+    if (!cleanedText) return { error: "Could not read receipt content" };
 
     const data = JSON.parse(cleanedText);
 
     if (!data.amount || !data.date) {
-      return { error: "Reciept missing required information" };
+      return { error: "Receipt missing required information" };
     }
 
     return {
@@ -428,6 +489,7 @@ export const scanReceiptService = async (
       receiptUrl: file.path,
     };
   } catch (error) {
-    return { error: "Reciept scanning  service unavailable" };
+    console.error("scanReceiptService error:", error);
+    return { error: "Receipt scanning service unavailable" };
   }
 };

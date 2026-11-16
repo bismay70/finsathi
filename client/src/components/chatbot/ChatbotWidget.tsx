@@ -3,6 +3,7 @@ import { MessageCircle, X, Send } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { cn } from "@/lib/utils";
+import { useTypedSelector } from "@/app/hook";
 
 type Message = {
   id: string;
@@ -11,6 +12,7 @@ type Message = {
 };
 
 export const ChatbotWidget = () => {
+  const { user, accessToken } = useTypedSelector((state) => state.auth);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { id: "1", text: "Hello! I am your AI Financial Assistant. How can I help you today?", sender: "bot" }
@@ -36,12 +38,11 @@ export const ChatbotWidget = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/v1/chat", {
+      const response = await fetch("http://localhost:8000/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Add auth token if required by backend middleware
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`
+          "Authorization": `Bearer ${accessToken || ""}`
         },
         body: JSON.stringify({ query: userMessage.text })
       });
