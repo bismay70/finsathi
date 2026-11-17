@@ -74,7 +74,7 @@ export default function DashboardPreview() {
       <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10 bg-white">
         
         {/* Top Navigation */}
-        <header className="h-20 flex items-center justify-between px-8 flex-shrink-0 border-b border-slate-100 bg-white z-20">
+        {/* <header className="h-20 flex items-center justify-between px-8 flex-shrink-0 border-b border-slate-100 bg-white z-20">
           <div className="flex items-center gap-12">
              <div className="text-xl font-bold tracking-tight text-slate-800 flex items-center gap-1">Finsathi <span className="text-[#CCFF00]">✦</span></div>
              <nav className="flex gap-8 text-sm font-bold tracking-wide text-slate-500">
@@ -97,7 +97,7 @@ export default function DashboardPreview() {
                <User className="w-5 h-5 text-slate-400" />
             </div>
           </div>
-        </header>
+        </header> */}
 
         {/* Dashboard Content */}
         <main className="flex-1 overflow-y-auto p-8 relative bg-[#F8FAFC]/50">

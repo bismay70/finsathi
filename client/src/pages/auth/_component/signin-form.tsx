@@ -15,7 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { toast } from "sonner";
-import { Loader } from "lucide-react";
+import { Loader, LogIn } from "lucide-react";
 import { useAppDispatch } from "@/app/hook";
 import { setCredentials } from "@/features/auth/authSlice";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -50,20 +50,25 @@ const SignInForm = ({
     setIsLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
-      const token = await userCredential.user.getIdToken();
+      const tokenResult = await userCredential.user.getIdTokenResult();
       
       const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/auth/sync-user`, {}, {
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${tokenResult.token}`
         }
       });
       
-      dispatch(setCredentials({ ...data, accessToken: token }));
+      dispatch(setCredentials({
+        user: data.user,
+        reportSetting: data.reportSetting,
+        accessToken: tokenResult.token,
+        expiresAt: new Date(tokenResult.expirationTime).getTime(),
+      }));
       toast.success("Login successful");
-      setTimeout(() => navigate(PROTECTED_ROUTES.HOME), 1000);
+      navigate(PROTECTED_ROUTES.HOME);
     } catch (error: any) {
       console.log(error);
-      toast.error(error.message || "Failed to login");
+      toast.error(error?.response?.data?.message || error.message || "Failed to login");
     } finally {
       setIsLoading(false);
     }
@@ -77,9 +82,9 @@ const SignInForm = ({
         {...props}
       >
         <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="text-2xl font-bold">Login to your account</h1>
+          <h1 className="text-2xl font-bold">Welcome back</h1>
           <p className="text-balance text-sm text-muted-foreground">
-            Enter your email below to login to your account
+            Sign in to continue managing your FinSathi workspace.
           </p>
         </div>
         <div className="grid gap-6">
@@ -111,8 +116,8 @@ const SignInForm = ({
               )}
             />
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Login
+              {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
+              Sign in
             </Button>
           </div>
 

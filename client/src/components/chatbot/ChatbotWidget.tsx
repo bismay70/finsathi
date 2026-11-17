@@ -12,7 +12,7 @@ type Message = {
 };
 
 export const ChatbotWidget = () => {
-  const { user, accessToken } = useTypedSelector((state) => state.auth);
+  const { accessToken } = useTypedSelector((state) => state.auth);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { id: "1", text: "Hello! I am your AI Financial Assistant. How can I help you today?", sender: "bot" }
@@ -63,7 +63,7 @@ export const ChatbotWidget = () => {
       {!isOpen && (
         <Button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl bg-blue-600 hover:bg-blue-700 text-white z-50 flex items-center justify-center transition-all duration-300"
+          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl bg-green-600 hover:bg-green-700 text-white z-50 flex items-center justify-center transition-all duration-300"
         >
           <MessageCircle size={28} />
         </Button>
@@ -73,12 +73,12 @@ export const ChatbotWidget = () => {
       {isOpen && (
         <div className="fixed bottom-6 right-6 w-80 sm:w-96 h-[500px] max-h-[80vh] bg-white rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden border border-gray-200 animate-in slide-in-from-bottom-5">
           {/* Header */}
-          <div className="bg-blue-600 text-white p-4 flex items-center justify-between shadow-sm">
+          <div className="bg-green-600 text-white p-4 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2">
               <MessageCircle size={20} />
               <h3 className="font-semibold text-lg">FinSathi AI</h3>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-white hover:bg-blue-700 h-8 w-8 rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-white hover:bg-green-700 h-8 w-8 rounded-full">
               <X size={18} />
             </Button>
           </div>
@@ -91,7 +91,7 @@ export const ChatbotWidget = () => {
                 className={cn(
                   "max-w-[80%] rounded-2xl p-3 text-sm",
                   msg.sender === "user"
-                    ? "bg-blue-600 text-white self-end rounded-tr-sm"
+                    ? "bg-green-600 text-white self-end rounded-tr-sm"
                     : "bg-white border border-gray-200 text-gray-800 self-start rounded-tl-sm shadow-sm"
                 )}
               >
@@ -113,13 +113,13 @@ export const ChatbotWidget = () => {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && handleSend()}
               placeholder="Ask anything..."
-              className="flex-1 border-gray-200 focus-visible:ring-blue-600 rounded-full bg-gray-50"
+              className="flex-1 border-gray-200 focus-visible:ring-green-600 rounded-full bg-gray-50"
             />
             <Button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
               size="icon"
-              className="rounded-full bg-blue-600 hover:bg-blue-700 shrink-0 h-10 w-10"
+              className="rounded-full bg-green-600 hover:bg-green-700 shrink-0 h-10 w-10"
             >
               <Send size={18} />
             </Button>

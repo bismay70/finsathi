@@ -4,9 +4,13 @@ import { PROTECTED_ROUTES } from "./common/routePath";
 
 const AuthRoute = () => {
   const { accessToken, user } = useTypedSelector((state) => state.auth);
+  const isAuthenticated = Boolean(accessToken && user && accessToken !== "mock-token");
 
-  // BYPASS AUTHENTICATION FOR DEVELOPMENT: always redirect from auth pages to home
-  return <Navigate to={PROTECTED_ROUTES.HOME} replace />;
+  if (isAuthenticated) {
+    return <Navigate to={PROTECTED_ROUTES.HOME} replace />;
+  }
+
+  return <Outlet />;
 };
 
 export default AuthRoute;

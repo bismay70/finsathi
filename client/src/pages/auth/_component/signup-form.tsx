@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { Loader } from "lucide-react";
+import { Loader, UserPlus } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,11 +45,11 @@ const SignUpForm = () => {
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-      const token = await userCredential.user.getIdToken();
+      const tokenResult = await userCredential.user.getIdTokenResult();
       
       await axios.post(`${import.meta.env.VITE_API_URL}/auth/sync-user`, { name: values.name }, {
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${tokenResult.token}`
         }
       });
       
@@ -58,7 +58,7 @@ const SignUpForm = () => {
       navigate(AUTH_ROUTES.SIGN_IN);
     } catch (error: any) {
       console.log(error);
-      toast.error(error.message || "Failed to sign up");
+      toast.error(error?.response?.data?.message || error.message || "Failed to sign up");
     } finally {
       setIsLoading(false);
     }
@@ -71,9 +71,9 @@ const SignUpForm = () => {
         className="flex flex-col gap-6"
       >
         <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="text-2xl font-bold">Sign up to Acme Inc.</h1>
+          <h1 className="text-2xl font-bold">Create your FinSathi account</h1>
           <p className="text-balance text-sm text-muted-foreground">
-            Fill information below to sign up
+            Start tracking expenses, reports, and AI insights.
           </p>
         </div>
         <div className="grid gap-6">
@@ -118,7 +118,7 @@ const SignUpForm = () => {
               )}
             />
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
               Sign up
             </Button>
           </div>

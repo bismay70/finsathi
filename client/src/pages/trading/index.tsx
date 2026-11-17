@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSocket } from "@/context/socket-provider";
 import { useExecuteTradeMutation } from "@/features/trading/tradingAPI";
 import { toast } from "sonner";

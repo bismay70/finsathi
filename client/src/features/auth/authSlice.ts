@@ -8,10 +8,11 @@ interface AuthState {
 }
 
 interface User {
-  id: number;
+  id?: number | string;
+  firebaseUid?: string;
   name: string;
   email: string;
-  profilePicture: string;
+  profilePicture?: string | null;
 }
 
 interface ReportSetting {
@@ -21,14 +22,9 @@ interface ReportSetting {
 }
 
 const initialState: AuthState = {
-  accessToken: "mock-token",
-  expiresAt: Date.now() + 1000 * 60 * 60 * 24,
-  user: {
-    id: 1,
-    name: "Mock User",
-    email: "mock@example.com",
-    profilePicture: "",
-  },
+  accessToken: null,
+  expiresAt: null,
+  user: null,
   reportSetting: null,
 };
 
@@ -47,7 +43,7 @@ const authSlice = createSlice({
 
       if (accessToken !== undefined) state.accessToken = accessToken;
       if (expiresAt !== undefined) state.expiresAt = expiresAt;
-      if (user !== undefined) state.user = { ...state.user, ...user };
+      if (user !== undefined) state.user = { ...(state.user ?? {}), ...user };
       if (reportSetting !== undefined)
         state.reportSetting = { ...state.reportSetting, ...reportSetting };
     },
